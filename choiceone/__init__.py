@@ -33,7 +33,7 @@ from .confidence import choice_confidence, noul_confidence, score_confidence
 from .interfaces import DEFAULT_MODEL_ID, Backend
 from .primitives import Choice, Noul, Question, Score
 from .protocol import parse_questions, response_to_wire
-from .remote import OpenAIBackend
+from .remote import AnthropicBackend, GoogleBackend, OpenAIBackend
 
 __all__ = [
     "Choice",
@@ -49,6 +49,8 @@ __all__ = [
     "ChoiceOneClient",
     "Backend",
     "OpenAIBackend",
+    "GoogleBackend",
+    "AnthropicBackend",
     "DEFAULT_MODEL_ID",
     "LocalBackend",
     "choice_confidence",

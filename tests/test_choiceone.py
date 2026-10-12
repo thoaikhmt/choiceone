@@ -6,6 +6,7 @@ weights: it returns predetermined label distributions.
 
 from __future__ import annotations
 
+import json
 import math
 
 import pytest
@@ -258,6 +259,7 @@ def test_importing_package_does_not_load_torch():
         import choiceone
         assert "torch" not in sys.modules, "torch was imported eagerly"
         assert "transformers" not in sys.modules, "transformers was imported eagerly"
+        assert "anthropic" not in sys.modules, "anthropic was imported eagerly"
         print("lazy-ok")
         """
     )
@@ -367,3 +369,105 @@ def test_remote_backend_reports_missing_logprobs():
     backend = make_remote(canned)
     with pytest.raises(RuntimeError, match="no content logprobs"):
         backend._top_logprobs_at_decision("p", ["0", "1"])
+
+
+# -- remote (Google Gemini) backend ------------------------------------------
+
+
+def make_google(canned):
+    from choiceone.remote import GoogleBackend
+
+    backend = GoogleBackend("gemini-3.1-flash-lite", api_key="test")
+    backend._post = lambda body: canned
+    return backend
+
+
+def gemini_reply(mapping, prompt_tokens=11):
+    return {
+        "candidates": [
+            {"content": {"parts": [{"text": json.dumps(mapping)}]}}
+        ],
+        "usageMetadata": {"promptTokenCount": prompt_tokens},
+    }
+
+
+def test_google_backend_reads_structured_probabilities():
+    backend = make_google(gemini_reply({"0": 0.25, "1": 0.75}))
+    probs = backend.probs_over_labels(["p"], [["0", "1"]])
+    assert probs[0][1] > probs[0][0]
+    assert sum(probs[0]) == pytest.approx(1.0)
+    assert backend.count_tokens(["p"]) == [11]
+
+
+def test_google_backend_request_uses_response_schema():
+    backend = make_google({})
+    body = backend._request_body("prompt", ["0", "1"])
+    config = body["generationConfig"]
+    assert config["responseMimeType"] == "application/json"
+    assert set(config["responseSchema"]["properties"]) == {"0", "1"}
+    # Gemini rejects additionalProperties, so it must be omitted.
+    assert "additionalProperties" not in config["responseSchema"]
+    assert body["contents"][0]["parts"][0]["text"].startswith("prompt")
+
+
+def test_google_backend_reports_missing_content():
+    backend = make_google({"candidates": [{}], "usageMetadata": {}})
+    with pytest.raises(RuntimeError, match="no content"):
+        backend.probs_over_labels(["p"], [["0", "1"]])
+
+
+def test_google_backend_supports_large_option_sets():
+    labels = [str(i) for i in range(12)]
+    backend = make_google(gemini_reply({label: 1.0 for label in labels}))
+    probs = backend.probs_over_labels(["p"], [labels])
+    assert len(probs[0]) == 12
+    assert sum(probs[0]) == pytest.approx(1.0)
+
+
+# -- remote (Anthropic) backend ----------------------------------------------
+
+
+class FakeAnthropicMessages:
+    def __init__(self, mapping, input_tokens=9):
+        self.mapping = mapping
+        self.input_tokens = input_tokens
+        self.calls = []
+
+    def create(self, **kwargs):
+        import json
+
+        self.calls.append(kwargs)
+        block = type("Block", (), {"type": "text", "text": json.dumps(self.mapping)})
+        usage = type("Usage", (), {"input_tokens": self.input_tokens})
+        return type("Message", (), {"content": [block()], "usage": usage()})
+
+
+def make_anthropic(mapping):
+    from choiceone.remote import AnthropicBackend
+
+    messages = FakeAnthropicMessages(mapping)
+    client = type("Client", (), {"messages": messages})()
+    backend = AnthropicBackend("claude-opus-5", client=client)
+    return backend, messages
+
+
+def test_anthropic_backend_elicits_and_normalises():
+    backend, messages = make_anthropic({"0": 1.0, "1": 3.0})
+    probs = backend.probs_over_labels(["p"], [["0", "1"]])
+    assert probs[0] == [pytest.approx(0.25), pytest.approx(0.75)]
+    assert backend.count_tokens(["p"]) == [9]
+    assert messages.calls[0]["output_config"]["format"]["type"] == "json_schema"
+
+
+def test_anthropic_backend_schema_lists_labels():
+    backend, messages = make_anthropic({"yes": 0.9, "no": 0.1})
+    backend.probs_over_labels(["p"], [["yes", "no"]])
+    schema = messages.calls[0]["output_config"]["format"]["schema"]
+    assert set(schema["properties"]) == {"yes", "no"}
+    assert schema["required"] == ["yes", "no"]
+
+
+def test_anthropic_backend_requires_probability_mass():
+    backend, _ = make_anthropic({"0": 0.0, "1": 0.0})
+    with pytest.raises(RuntimeError, match="no probability mass"):
+        backend.probs_over_labels(["p"], [["0", "1"]])

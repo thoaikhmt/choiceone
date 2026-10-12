@@ -55,12 +55,20 @@ the distribution is, so your code can act automatically, ask, or escalate.
 
 ## Backends
 
-The model side is a pluggable `Backend`. `choiceone` ships with two:
+The model side is a pluggable `Backend`. `choiceone` ships with these:
 
 - `LocalBackend` — a local Hugging Face causal LM (default `Qwen/Qwen3-0.6B`).
   Text-generation-free: reads the next-token distribution.
 - `OpenAIBackend` — any OpenAI-compatible `logprobs` endpoint (DeepSeek,
   OpenAI, vLLM, ...). Stdlib only.
+- `GoogleBackend` — Google Gemini, reading `logprobs` from `generateContent`.
+  Stdlib only.
+- `AnthropicBackend` — Claude, which has no logprobs API, so it elicits an
+  explicit JSON probability per label via structured output
+  (`pip install 'choiceone[anthropic]'`).
+
+The logprobs backends (`OpenAIBackend`, `GoogleBackend`) score a single content
+token, so they support up to 10 options and `yes`/`no`.
 
 Embed your own AI by subclassing `Backend` and implementing three methods:
 

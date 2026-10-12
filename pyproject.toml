@@ -37,6 +37,7 @@ dependencies = []
 [project.optional-dependencies]
 local = ["torch", "transformers"]
 server = ["fastapi", "uvicorn"]
+anthropic = ["anthropic"]
 test = ["pytest", "fastapi", "uvicorn", "httpx"]
 
 [project.scripts]
