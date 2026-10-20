@@ -131,7 +131,10 @@ class ChoiceOneClient:
 
     # -- embedding conveniences ---------------------------------------------
 
-    decide = choice_one
+    def decide(
+        self, state: Any, questions: dict[str, Question]
+    ) -> ChoiceOneResponse:
+        return self.choice_one(state, questions)
 
     def __call__(
         self, state: Any, questions: dict[str, Question]

@@ -38,7 +38,8 @@ dependencies = []
 local = ["torch", "transformers"]
 server = ["fastapi", "uvicorn"]
 anthropic = ["anthropic"]
-test = ["pytest", "fastapi", "uvicorn", "httpx"]
+mlflow = ["mlflow>=2.15"]
+test = ["pytest", "fastapi", "uvicorn", "httpx", "mlflow>=2.15"]
 
 [project.scripts]
 choiceone-serve = "choiceone.server:main"

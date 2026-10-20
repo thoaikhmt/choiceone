@@ -81,6 +81,30 @@ class MyBackend(Backend):
     def probs_over_labels(self, prompts, labels_per_prompt): ...
 ```
 
+## MLflow tracing
+
+`choiceone` ships a first-party MLflow integration (`pip install 'choiceone[mlflow]'`).
+It records a `choiceone.decision` span for every call, with a nested
+`choiceone.backend` LLM span for the model seam:
+
+```python
+import mlflow
+from choiceone import ChoiceOne
+import choiceone.mlflow
+
+mlflow.set_tracking_uri("http://localhost:5000")
+choiceone.mlflow.autolog()
+
+so = ChoiceOne(backend=backend)
+so(state, questions)  # traced
+```
+
+`mlflow.openai.autolog()` does **not** trace `choiceone`: the hosted backends
+talk HTTP through stdlib `urllib`, not the OpenAI SDK. Use
+`choiceone.mlflow.autolog()` instead. Call `autolog(disable=True)` to remove the
+patches, or `autolog(log_traces=False)` to keep the integration configured
+without recording traces.
+
 ## HTTP server
 
 ```bash
